@@ -47,3 +47,23 @@ def test_render_project_writes_output_and_copies_other_files(tmp_path: Path):
     rendered = (result.output_dir / "main.tex").read_text()
     assert "abc123" in rendered
     assert (result.output_dir / "figure.png").read_bytes() == b"\x89PNG\r\n"
+
+
+def test_render_project_reads_json_secrets_file(tmp_path: Path):
+    (tmp_path / "secrets.json").write_text('{"API_KEY": "abc123"}')
+    (tmp_path / "main.tex").write_text(r"{{ secret.API_KEY }}")
+
+    result = render_project(tmp_path, Config(secrets_file="secrets.json"))
+
+    rendered = (result.output_dir / "main.tex").read_text()
+    assert rendered == "abc123"
+
+
+def test_render_project_reads_yaml_secrets_file(tmp_path: Path):
+    (tmp_path / "secrets.yaml").write_text("API_KEY: abc123\n")
+    (tmp_path / "main.tex").write_text(r"{{ secret.API_KEY }}")
+
+    result = render_project(tmp_path, Config(secrets_file="secrets.yaml"))
+
+    rendered = (result.output_dir / "main.tex").read_text()
+    assert rendered == "abc123"

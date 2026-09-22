@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "secret-latex"
 version = "0.1.0"
-description = "Find-and-replace secrets from a .env file into LaTeX sources at build time, then run your LaTeX engine."
+description = "Find-and-replace secrets from a .env/.json/.yaml file into LaTeX sources at build time, then run your LaTeX engine."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ authors = [
     { name = "Brendan Raykoff", email = "braykoff2007@gmail.com" },
 ]
 requires-python = ">=3.9"
-keywords = ["latex", "secrets", "dotenv", "env", "build-tool", "templating"]
+keywords = ["latex", "secrets", "dotenv", "env", "json", "yaml", "build-tool", "templating"]
 classifiers = [
     "Environment :: Console",
     "Intended Audience :: Science/Research",
@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "python-dotenv>=1.0",
+    "pyyaml>=6.0",
     "tomli>=2.0; python_version < '3.11'",
 ]
 

@@ -1,20 +1,22 @@
 """Core find-and-replace logic: substitute {{ secret.NAME }} / {{ secret.NAME:default }}
-placeholders. This never raises over a missing .env file or a missing key: it falls
-back to the placeholder's default, or an empty string if there is no default, and
-prints what it did for each occurrence so the LaTeX build log shows exactly which
-secrets were used.
+placeholders. This never raises over a missing or malformed secrets file, or a missing
+key: it falls back to the placeholder's default, or an empty string if there is no
+default, and prints what it did for each occurrence so the LaTeX build log shows
+exactly which secrets were used.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import dotenv_values
+import yaml
 
 from .config import Config
+from .loaders import load_secrets_file
 
 LOG_PREFIX = "[secret-latex]"
 
@@ -29,16 +31,27 @@ class RenderResult:
     processed_files: list[Path]
 
 
-def load_secrets(env_file: Path) -> dict[str, str]:
-    if not env_file.is_file():
+def load_secrets(secrets_path: Path) -> dict[str, str]:
+    if not secrets_path.is_file():
         _log(
-            f".env file not found at {env_file}; no secrets loaded, "
+            f"secrets file not found at {secrets_path}; no secrets loaded, "
             "defaults (or blanks) will be used for every placeholder"
         )
         return {}
-    values = dotenv_values(env_file)
-    secrets = {k: v for k, v in values.items() if v is not None}
-    _log(f"loaded {len(secrets)} key(s) from {env_file}")
+
+    def warn(message: str) -> None:
+        _log(f"{secrets_path.name}: {message}")
+
+    try:
+        secrets = load_secrets_file(secrets_path, warn=warn)
+    except (json.JSONDecodeError, yaml.YAMLError, UnicodeDecodeError, OSError) as exc:
+        _log(
+            f"could not parse secrets file {secrets_path} ({exc}); "
+            "no secrets loaded, defaults (or blanks) will be used for every placeholder"
+        )
+        return {}
+
+    _log(f"loaded {len(secrets)} key(s) from {secrets_path}")
     return secrets
 
 
@@ -55,12 +68,12 @@ def substitute(
             default = default.strip()
 
         if name in secrets:
-            _log(f"{source_label}: {name} -> replaced with value from .env")
+            _log(f"{source_label}: {name} -> replaced with value from secrets file")
             return secrets[name]
         if default is not None:
-            _log(f'{source_label}: {name} -> not found in .env, using default "{default}"')
+            _log(f'{source_label}: {name} -> not found in secrets file, using default "{default}"')
             return default
-        _log(f"{source_label}: {name} -> not found in .env and no default given, leaving blank")
+        _log(f"{source_label}: {name} -> not found in secrets file and no default given, leaving blank")
         return ""
 
     return compiled.sub(_replace, text)
@@ -76,8 +89,8 @@ def _source_rel_paths(project_root: Path, sources: list[str]) -> set[Path]:
 
 
 def render_project(project_root: Path, config: Config) -> RenderResult:
-    env_path = project_root / config.env_file
-    secrets = load_secrets(env_path)
+    secrets_path = project_root / config.secrets_file
+    secrets = load_secrets(secrets_path)
 
     output_dir = project_root / config.output_dir
     exclude_dirs = {output_dir.resolve(), (project_root / ".git").resolve()}

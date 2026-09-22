@@ -24,7 +24,7 @@ DEFAULT_PATTERN = r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\s*\}\}"
 
 @dataclass
 class Config:
-    env_file: str = ".env"
+    secrets_file: str = ".env"
     sources: list[str] = field(default_factory=lambda: ["**/*.tex"])
     output_dir: str = "build"
     engine: str = "pdflatex"

@@ -14,8 +14,8 @@ from .render import render_project
 
 def _build_config(args: argparse.Namespace) -> Config:
     config = Config.load(args.root)
-    if args.env_file is not None:
-        config.env_file = args.env_file
+    if args.secrets_file is not None:
+        config.secrets_file = args.secrets_file
     if args.output_dir is not None:
         config.output_dir = args.output_dir
     return config
@@ -26,9 +26,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--root",
         type=Path,
         default=Path.cwd(),
-        help="project root containing the LaTeX sources and .env file (default: cwd)",
+        help="project root containing the LaTeX sources and secrets file (default: cwd)",
     )
-    parser.add_argument("--env-file", help="path to the .env file, relative to --root")
+    parser.add_argument(
+        "--secrets-file",
+        help="path to the secrets file (.env, .json, or .yaml/.yml), relative to --root",
+    )
     parser.add_argument("--output-dir", help="directory to write rendered output into")
 
 
@@ -70,7 +73,7 @@ def _run_build(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="secret-latex",
-        description="Inject secrets from a .env file into LaTeX sources at build time.",
+        description="Inject secrets from a .env/.json/.yaml file into LaTeX sources at build time.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)

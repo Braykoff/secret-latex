@@ -12,6 +12,9 @@ build/
 
 # Secrets
 .env
+secrets.json
+secrets.yaml
+secrets.yml
 
 # Test / lint caches
 .pytest_cache/

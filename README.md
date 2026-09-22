@@ -2,7 +2,7 @@
 
 Keep secrets (API keys, tokens, personal info) out of your `.tex` sources and
 your git history. Reference them with a placeholder, keep the real values in
-a local `.env` file, and let `secret-latex` fill them in at build time.
+a local secrets file, and let `secret-latex` fill them in at build time.
 
 ```tex
 \author{ {{ secret.AUTHOR_NAME }} }
@@ -10,22 +10,41 @@ My API key is: {{ secret.API_KEY }}
 Environment: {{ secret.ENVIRONMENT:staging }}
 ```
 
+The secrets file can be `.env`, `.json`, or `.yaml`/`.yml` — the format is
+picked from its extension (anything else, including a plain `.env` with no
+extension, is parsed as dotenv syntax). All three are gitignored, never
+committed:
+
 ```env
-# .env  (gitignored, never committed)
+# .env
 AUTHOR_NAME=Ada Lovelace
 API_KEY=sk-live-...
 ```
 
+```json
+{ "AUTHOR_NAME": "Ada Lovelace", "API_KEY": "sk-live-..." }
+```
+
+```yaml
+AUTHOR_NAME: Ada Lovelace
+API_KEY: sk-live-...
+```
+
+Each one must be a flat mapping of names to plain values; a nested
+object/list under a key is skipped with a console warning rather than used.
+
 A placeholder can carry a default after a colon:
 `{{ secret.NAME:default value here }}`. Substitution never fails the build:
 
-- if `.env` is missing entirely, every placeholder falls back to its default
-- if a key isn't in `.env`, that placeholder falls back to its default
+- if the secrets file is missing or fails to parse, every placeholder falls
+  back to its default
+- if a key isn't in the secrets file, that placeholder falls back to its
+  default
 - if there's no default either, the placeholder is simply replaced with an
   empty string
 
 Every one of those cases is printed to the console as it happens, so the
-build log shows exactly which secrets came from `.env`, which fell back to a
+build log shows exactly which secrets were loaded, which fell back to a
 default, and which were left blank.
 
 ## Install
@@ -58,7 +77,7 @@ Both commands read `secret-latex.toml` from the project root if present (see
 
 ```toml
 [secret-latex]
-env_file = ".env"
+secrets_file = ".env"
 sources = ["**/*.tex"]
 output_dir = "build"
 engine = "pdflatex"

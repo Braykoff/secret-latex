@@ -73,7 +73,7 @@ This writes the rendered project to `build/` (copying every file so
 up at `build/main.pdf`.
 
 Both commands read `secret-latex.toml` from the project root if present (see
-[`secret-latex.example.toml`](secret-latex.example.toml)):
+[`examples/secret-latex.example.toml`](examples/secret-latex.example.toml)):
 
 ```toml
 [secret-latex]

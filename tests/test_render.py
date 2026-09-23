@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from secret_latex.config import Config
-from secret_latex.render import render_project, substitute
+from secret_latex.render import render_in_place, render_project, substitute
 
 
 def test_substitute_replaces_known_placeholder():
@@ -67,3 +67,33 @@ def test_render_project_reads_yaml_secrets_file(tmp_path: Path):
 
     rendered = (result.output_dir / "main.tex").read_text()
     assert rendered == "abc123"
+
+
+def test_render_in_place_substitutes_during_block_and_restores_after(tmp_path: Path):
+    (tmp_path / ".env").write_text("API_KEY=abc123\n")
+    tex_path = tmp_path / "main.tex"
+    original = r"\newcommand{\key}{ {{ secret.API_KEY }} }"
+    tex_path.write_text(original)
+
+    with render_in_place(tmp_path, Config()) as rendered:
+        assert rendered == [Path("main.tex")]
+        assert "abc123" in tex_path.read_text()
+        assert not (tmp_path / "build").exists()
+
+    assert tex_path.read_text() == original
+
+
+def test_render_in_place_restores_file_even_if_block_raises(tmp_path: Path):
+    (tmp_path / ".env").write_text("API_KEY=abc123\n")
+    tex_path = tmp_path / "main.tex"
+    original = r"{{ secret.API_KEY }}"
+    tex_path.write_text(original)
+
+    try:
+        with render_in_place(tmp_path, Config()):
+            assert tex_path.read_text() == "abc123"
+            raise RuntimeError("simulated engine crash")
+    except RuntimeError:
+        pass
+
+    assert tex_path.read_text() == original

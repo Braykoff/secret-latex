@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import Config
-from .render import render_project
+from .render import render_in_place, render_project
 
 
 def _build_config(args: argparse.Namespace) -> Config:
@@ -70,6 +70,47 @@ def _run_build(args: argparse.Namespace) -> int:
     return proc.returncode
 
 
+def _resolve_tex_file(token: str) -> Path:
+    path = Path(token).resolve()
+    if not path.is_file() and path.suffix != ".tex":
+        candidate = path.with_suffix(path.suffix + ".tex")
+        if candidate.is_file():
+            path = candidate
+    return path
+
+
+def _run_engine(args: argparse.Namespace) -> int:
+    if not args.engine_args:
+        print("error: no .tex file given (it must be the last argument)", file=sys.stderr)
+        return 1
+
+    *engine_flags, file_token = args.engine_args
+    main_tex_source = _resolve_tex_file(file_token)
+    if not main_tex_source.is_file():
+        print(f"error: no such file: {file_token}", file=sys.stderr)
+        return 1
+
+    project_root = main_tex_source.parent
+    try:
+        config = Config.load(project_root)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    config.engine = args.engine
+    config.engine_args = engine_flags
+
+    command = [config.engine, *config.engine_args, main_tex_source.name]
+    with render_in_place(project_root, config):
+        print(f"running: {' '.join(command)} (in {project_root})")
+        try:
+            proc = subprocess.run(command, cwd=project_root, check=False)
+        except OSError as exc:
+            print(f"error: could not run '{config.engine}': {exc}", file=sys.stderr)
+            return 1
+
+    return proc.returncode
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="secret-latex",
@@ -96,6 +137,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="extra argument to pass to the engine (repeatable)",
     )
     build_parser_.set_defaults(func=_run_build)
+
+    engine_parser = subparsers.add_parser(
+        "engine",
+        help="act as a drop-in LaTeX engine for editors (TeXShop, TeXstudio, LaTeX Workshop, ...)",
+        description=(
+            "Meant to be pointed at from a LaTeX editor's engine/tool configuration in place "
+            "of pdflatex/xelatex/lualatex directly. The project root and secrets file are "
+            "auto-detected from the .tex file's directory; all engine flags are forwarded "
+            "as-is, and the engine compiles directly in that directory -- no separate build "
+            "directory, no copies left behind. Sources are substituted in place only for the "
+            "duration of the compile, then restored to their original placeholder form."
+        ),
+    )
+    engine_parser.add_argument("engine", help="LaTeX engine executable to invoke, e.g. pdflatex")
+    engine_parser.add_argument(
+        "engine_args",
+        nargs=argparse.REMAINDER,
+        help="flags to forward to the engine, with the .tex file last (as the editor passes them)",
+    )
+    engine_parser.set_defaults(func=_run_engine)
 
     return parser
 

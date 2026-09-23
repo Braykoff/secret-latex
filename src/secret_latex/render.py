@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,3 +118,35 @@ def render_project(project_root: Path, config: Config) -> RenderResult:
             shutil.copy2(path, dest)
 
     return RenderResult(output_dir=output_dir, processed_files=processed)
+
+
+@contextmanager
+def render_in_place(project_root: Path, config: Config):
+    """Substitute placeholders directly into the matched .tex sources under
+    `project_root`, in place, for the duration of the `with` block, then
+    restore their original contents on exit -- success, failure, or
+    interruption (Ctrl-C). No separate build directory is created and no
+    copies are left behind anywhere: the engine can compile straight in
+    `project_root` and its output (PDF, .aux, .log, .synctex.gz, ...) lands
+    exactly where it normally would, since nothing ever moved.
+
+    Yields the sorted list of relative paths that were rendered.
+    """
+    secrets_path = project_root / config.secrets_file
+    secrets = load_secrets(secrets_path)
+    rel_paths = sorted(_source_rel_paths(project_root, config.sources))
+
+    originals: dict[Path, str] = {}
+    try:
+        for rel_path in rel_paths:
+            path = project_root / rel_path
+            original_text = path.read_text(encoding="utf-8")
+            originals[path] = original_text
+            new_text = substitute(
+                original_text, config.pattern, secrets, source_label=str(rel_path)
+            )
+            path.write_text(new_text, encoding="utf-8")
+        yield rel_paths
+    finally:
+        for path, original_text in originals.items():
+            path.write_text(original_text, encoding="utf-8")

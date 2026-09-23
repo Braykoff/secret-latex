@@ -12,8 +12,8 @@ Environment: {{ secret.ENVIRONMENT:staging }}
 
 The secrets file can be `.env`, `.json`, or `.yaml`/`.yml` — the format is
 picked from its extension (anything else, including a plain `.env` with no
-extension, is parsed as dotenv syntax). All three are gitignored, never
-committed:
+extension, is parsed as dotenv syntax). Keep all three out of git (see
+[Protect your secrets](#protect-your-secrets) below):
 
 ```env
 # .env
@@ -89,6 +89,50 @@ CLI flags override the config file:
 ```bash
 secret-latex build main.tex --engine xelatex --output-dir dist
 ```
+
+## Using it from a LaTeX editor
+
+`secret-latex engine <name> [flags...] file.tex` is meant to be dropped
+straight into a LaTeX editor's "engine" or build-tool configuration in
+place of `pdflatex`/`xelatex`/`lualatex`. It auto-detects the project root
+and secrets file from the `.tex` file's own directory, forwards flags to
+the real engine unchanged, and compiles directly in that directory —
+substituting placeholders into the source in place just long enough for
+the engine to run, then restoring the original placeholder text. No build
+directory, no copies left behind: the PDF, `.log`, `.synctex.gz`, etc. show
+up exactly where they always would, because that's where the compile
+actually happened.
+
+```bash
+secret-latex engine pdflatex -interaction=nonstopmode -synctex=1 main.tex
+```
+
+See [`install/`](install/) for step-by-step setup with TeXShop, LaTeXiT,
+TeXstudio, TeXworks, Kile, and VS Code's LaTeX Workshop, on macOS, Linux,
+and Windows.
+
+## Protect your secrets
+
+The compiled PDF has your resolved secrets baked into it in plain text —
+and so can the `.log`/`.aux`/`.synctex.gz` files a compile produces. None
+of that is gitignored automatically; add this to your **project's**
+`.gitignore`:
+
+```gitignore
+.env
+secrets.json
+secrets.yaml
+secrets.yml
+*.aux
+*.log
+*.synctex.gz
+
+# only if you use `secret-latex render`/`build`, not `engine`
+build/
+```
+
+See [`install/README.md`](install/README.md#protect-your-secrets) for the
+full writeup, including what to do if you intentionally track the PDF.
 
 ## Development
 

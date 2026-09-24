@@ -107,6 +107,23 @@ actually happened.
 secret-latex engine pdflatex -interaction=nonstopmode -synctex=1 main.tex
 ```
 
+**Recommended: tell the editor which engine to use, in the file itself.** Add
+one comment on the first line of your `.tex` file, and the editor will pick
+the `secret-latex` engine every time you typeset that document, instead of
+you having to choose it from a dropdown (and remembering to):
+
+```tex
+%!TEX TS-program = Secret-pdfLaTeX
+```
+
+In TeXShop, the value is the name of the installed engine without the
+`.engine` extension: `Secret-pdfLaTeX`, `Secret-XeLaTeX`, or
+`Secret-LuaLaTeX`. Without this line, TeXShop falls back to whatever engine
+is currently selected in its toolbar, which is easy to leave on plain
+`pdflatex` — and then your `{{ secret.NAME }}` placeholders are compiled
+as literal text. Other editors have similar comments, but they choose from
+their own configured build tools; see the guide for your editor below.
+
 See [`install/`](install/) for step-by-step setup with TeXShop, LaTeXiT,
 TeXstudio, TeXworks, Kile, and VS Code's LaTeX Workshop, on macOS, Linux,
 and Windows.

@@ -8,8 +8,11 @@ exactly which secrets were used.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import signal
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,14 +124,47 @@ def render_project(project_root: Path, config: Config) -> RenderResult:
 
 
 @contextmanager
+def _exit_on_termination_signals():
+    """Turn SIGTERM/SIGHUP (e.g. an editor's "Abort" button) into a normal
+    SystemExit, so `finally` blocks run instead of the process dying instantly
+    with secrets still written into the sources. Only the first signal acts;
+    repeats are ignored so a restore in progress isn't interrupted.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    fired = False
+
+    def handler(signum, _frame):
+        nonlocal fired
+        if fired:
+            return
+        fired = True
+        raise SystemExit(128 + signum)
+
+    previous = {}
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            previous[sig] = signal.signal(sig, handler)
+    try:
+        yield
+    finally:
+        for sig, old_handler in previous.items():
+            signal.signal(sig, old_handler)
+
+
+@contextmanager
 def render_in_place(project_root: Path, config: Config):
     """Substitute placeholders directly into the matched .tex sources under
     `project_root`, in place, for the duration of the `with` block, then
-    restore their original contents on exit -- success, failure, or
-    interruption (Ctrl-C). No separate build directory is created and no
-    copies are left behind anywhere: the engine can compile straight in
-    `project_root` and its output (PDF, .aux, .log, .synctex.gz, ...) lands
-    exactly where it normally would, since nothing ever moved.
+    restore their original contents (and modification times, so editors and
+    file watchers don't see the source as changed) on exit -- success,
+    failure, Ctrl-C, or SIGTERM/SIGHUP. No separate build directory is
+    created and no copies are left behind anywhere: the engine can compile
+    straight in `project_root` and its output (PDF, .aux, .log, .synctex.gz,
+    ...) lands exactly where it normally would, since nothing ever moved.
 
     Yields the sorted list of relative paths that were rendered.
     """
@@ -136,17 +172,20 @@ def render_in_place(project_root: Path, config: Config):
     secrets = load_secrets(secrets_path)
     rel_paths = sorted(_source_rel_paths(project_root, config.sources))
 
-    originals: dict[Path, str] = {}
-    try:
-        for rel_path in rel_paths:
-            path = project_root / rel_path
-            original_text = path.read_text(encoding="utf-8")
-            originals[path] = original_text
-            new_text = substitute(
-                original_text, config.pattern, secrets, source_label=str(rel_path)
-            )
-            path.write_text(new_text, encoding="utf-8")
-        yield rel_paths
-    finally:
-        for path, original_text in originals.items():
-            path.write_text(original_text, encoding="utf-8")
+    originals: dict[Path, tuple[str, os.stat_result]] = {}
+    with _exit_on_termination_signals():
+        try:
+            for rel_path in rel_paths:
+                path = project_root / rel_path
+                original_stat = path.stat()
+                original_text = path.read_text(encoding="utf-8")
+                originals[path] = (original_text, original_stat)
+                new_text = substitute(
+                    original_text, config.pattern, secrets, source_label=str(rel_path)
+                )
+                path.write_text(new_text, encoding="utf-8")
+            yield rel_paths
+        finally:
+            for path, (original_text, original_stat) in originals.items():
+                path.write_text(original_text, encoding="utf-8")
+                os.utime(path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))

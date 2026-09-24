@@ -29,6 +29,22 @@ toolbar), you'll now see **Secret-pdfLaTeX** / **Secret-XeLaTeX** /
 normal — the PDF, `.synctex.gz` (for Cmd-click sync), and log all show up
 next to your `.tex` file exactly as they would with the real engine.
 
+TeXShop is a GUI app, so it doesn't see your shell's `PATH`; the engine
+scripts add `~/.local/bin` (pipx), Homebrew, and `/Library/TeX/texbin`
+themselves. If a typeset does nothing or the console shows
+`secret-latex: command not found`, check that `secret-latex --version`
+works in Terminal, then re-run `install.sh` so you have the latest scripts
+(and quit and reopen TeXShop). You can also reproduce what TeXShop does
+from Terminal, which prints any error directly:
+
+```bash
+cd /path/to/your/project
+env -i HOME="$HOME" PATH=/usr/bin:/bin \
+  ~/Library/TeXShop/Engines/Secret-pdfLaTeX.engine "$PWD/main.tex"
+```
+
+The **Abort** button is safe: it restores your source file before exiting.
+
 ## 3. LaTeXiT
 
 LaTeXiT lets you point its compiler paths at a custom script in

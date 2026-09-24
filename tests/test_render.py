@@ -1,4 +1,10 @@
+import os
+import signal
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from secret_latex.config import Config
 from secret_latex.render import render_in_place, render_project, substitute
@@ -96,4 +102,55 @@ def test_render_in_place_restores_file_even_if_block_raises(tmp_path: Path):
     except RuntimeError:
         pass
 
+    assert tex_path.read_text() == original
+
+
+def test_render_in_place_preserves_modification_time(tmp_path: Path):
+    (tmp_path / ".env").write_text("API_KEY=abc123\n")
+    tex_path = tmp_path / "main.tex"
+    tex_path.write_text(r"{{ secret.API_KEY }}")
+    os.utime(tex_path, ns=(1_600_000_000_000_000_000, 1_600_000_000_000_000_000))
+    before = tex_path.stat().st_mtime_ns
+
+    with render_in_place(tmp_path, Config()):
+        pass
+
+    assert tex_path.stat().st_mtime_ns == before
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP])
+def test_render_in_place_restores_source_when_process_is_signalled(tmp_path: Path, sig):
+    (tmp_path / ".env").write_text("API_KEY=abc123\n")
+    tex_path = tmp_path / "main.tex"
+    original = r"{{ secret.API_KEY }}"
+    tex_path.write_text(original)
+
+    script = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from secret_latex.config import Config\n"
+        "from secret_latex.render import render_in_place\n"
+        "with render_in_place(Path(sys.argv[1]), Config()):\n"
+        "    print('READY', flush=True)\n"
+        "    time.sleep(30)\n"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-c", script, str(tmp_path)],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for line in proc.stdout:
+            if line.strip() == "READY":
+                break
+        assert tex_path.read_text() == "abc123"  # substituted while "compiling"
+
+        proc.send_signal(sig)
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+    assert proc.returncode == 128 + sig
     assert tex_path.read_text() == original
